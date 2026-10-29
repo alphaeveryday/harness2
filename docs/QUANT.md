@@ -54,6 +54,12 @@ The immutable `quant/prepare.py` remains outside the editable harness. Each prob
 calls it, which invokes the existing Quant Lab runner and assessor. Actual qlab
 evaluations are serialized even when the upstream method proposes in parallel.
 
+After each evaluation, an actual Codex researcher consumes the selected harness,
+the three installed skills and the fixed numeric artifacts to produce
+`research_note.md`. It cannot change the already evaluated candidate. This authored
+interpretation and the retained local model transcript enter the upstream
+Propose–Probe–Compose evidence. Numeric replay alone is not a delivered task.
+
 The first integration task replays frozen M1 and edits research guidance only.
 It is not a new candidate search or investment-performance validation. A normal
 authorized research task can propose changes to `scripts/train.py` while keeping

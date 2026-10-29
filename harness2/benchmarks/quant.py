@@ -4,14 +4,17 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
 from ..core import tree
+from ..core.codex_channel import run_codex
 from ..core.spec import BenchPrompts, BenchSpec, ChannelSpec
 from ..substrate.codex import CodexSubstrate
 
@@ -127,36 +130,74 @@ class QuantAdapter:
         self.validate_tree(tree.read_tree(self.substrate.surface(), harness))
         candidate = harness / "scripts/train.py"
         with self._lock:
-            if (directory / "result.json").is_file():
+            cached = (directory / "result.json").is_file()
+            if cached:
                 if (directory / "train.py").read_bytes() != candidate.read_bytes():
                     raise QuantContractError("A completed run identity cannot change its source")
-                return directory
-            directory.parent.mkdir(parents=True, exist_ok=True)
-            self.execution_count += 1
-            process = subprocess.run(
-                [sys.executable, str(self.workspace.autoresearch / "quant/prepare.py"),
-                 "--candidate", str(candidate), "--hypothesis", self.task,
-                 "--output", str(directory)],
-                capture_output=True, text=True, timeout=timeout or 1400, check=False,
-            )
-            directory.mkdir(parents=True, exist_ok=True)
-            (directory / "trajectory.md").write_text(
-                "[ACTION] Run the fixed autoresearch Quant evaluator\n[OBSERVATION]\n"
-                + process.stdout + "\n[ERROR]\n" + process.stderr, encoding="utf-8",
-            )
-            if process.returncode:
-                raise QuantContractError(f"Quant evaluator failed; see {directory / 'trajectory.md'}")
+                if self.delivered(directory):
+                    return directory
+            else:
+                directory.parent.mkdir(parents=True, exist_ok=True)
+                self.execution_count += 1
+                process = subprocess.run(
+                    [sys.executable, str(self.workspace.autoresearch / "quant/prepare.py"),
+                     "--candidate", str(candidate), "--hypothesis", self.task,
+                     "--output", str(directory)],
+                    capture_output=True, text=True, timeout=timeout or 1400, check=False,
+                )
+                directory.mkdir(parents=True, exist_ok=True)
+                (directory / "trajectory.md").write_text(
+                    "[ACTION] Run the fixed autoresearch Quant evaluator\n[OBSERVATION]\n"
+                    + process.stdout + "\n[ERROR]\n" + process.stderr, encoding="utf-8",
+                )
+                if process.returncode:
+                    raise QuantContractError(f"Quant evaluator failed; see {directory / 'trajectory.md'}")
+        self._research_report(harness, directory)
         return directory
 
+    def _research_report(self, harness: Path, directory: Path) -> None:
+        """Execute the chosen instructions against actual results and retain the model trace."""
+        workspace = Path(tempfile.mkdtemp(prefix="researcher-", dir=directory))
+        tree.write_tree(self.substrate.surface(), tree.read_tree(self.substrate.surface(), harness),
+                        workspace, stubs=False)
+        evidence = workspace / "evidence"
+        evidence.mkdir()
+        for name in ("result.json", "assessment.json", "hypothesis.txt"):
+            shutil.copyfile(directory / name, evidence / name)
+        original = (workspace / "scripts/train.py").read_bytes()
+        prompt = (
+            "Complete one bounded research-report task, then stop. Read AGENTS.md, the three "
+            "installed scientific SKILL.md files and their references/quant-development.md. "
+            "The fixed evaluator has ALREADY run; its actual artifacts are in evidence/. "
+            "Do not run another experiment, change scripts/train.py, read outside this "
+            "workspace, access raw market data, call external services, or place orders. "
+            "Use the selected harness instructions to interpret these artifacts. Return "
+            "a concise research note (at most 250 words) stating observation, fixed "
+            "comparison, interpretation limits and one falsifiable next question. Cite "
+            "artifact filenames and fields. A failed development screen remains failed. "
+            "No additional tests, installations or diagrams are needed for this report.\n\n"
+            + self.task
+        )
+        note, _, error = run_codex(workspace, prompt, 900)
+        if error or not note.strip():
+            raise QuantContractError(f"Researcher failed: {error}; trace in {workspace}")
+        if original != (workspace / "scripts/train.py").read_bytes():
+            raise QuantContractError("Reporting researcher changed the already evaluated candidate")
+        (directory / "research_note.md").write_text(note, encoding="utf-8")
+        with (directory / "trajectory.md").open("a", encoding="utf-8") as trajectory:
+            trajectory.write("\n[ACTION] Codex researcher reads the installed harness and results\n"
+                             "[OBSERVATION]\n" + note + "\n")
+
     def delivered(self, run_dir: Path) -> bool:
-        return (run_dir / "result.json").is_file() and (run_dir / "assessment.json").is_file()
+        return all((run_dir / name).is_file() for name in
+                   ("result.json", "assessment.json", "research_note.md"))
 
     def trajectory(self, run_dir: Path, *, obs_trunc: int) -> str:
         return (run_dir / "trajectory.md").read_text(encoding="utf-8")
 
     def deliverable_text(self, run_dir: Path) -> str:
-        return (run_dir / "result.json").read_text(encoding="utf-8")
+        return (run_dir / "research_note.md").read_text(encoding="utf-8")
 
     def deliverable_files(self, run_dir: Path) -> dict[str, str]:
         return {name: (run_dir / name).read_text(encoding="utf-8")
-                for name in ("result.json", "assessment.json", "hypothesis.txt")}
+                for name in ("research_note.md", "result.json", "assessment.json", "hypothesis.txt")}
