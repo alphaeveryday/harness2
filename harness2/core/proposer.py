@@ -113,7 +113,7 @@ class Proposer:
                     "ANTHROPIC_MODEL": self.spec.model,
                 }
             )
-        else:
+        elif self.spec.kind == "opencode":
             e.update(
                 {
                     "GOOGLE_VERTEX_PROJECT": self.project,
@@ -159,9 +159,17 @@ class Proposer:
                 if context_dir and Path(context_dir).is_dir():
                     shutil.copytree(context_dir, tmp / "context", dirs_exist_ok=True)
                 with _SEM if _SEM is not None else contextlib.nullcontext():
-                    text, cost, err = (
-                        self._claude_cli if self.spec.kind == "claude_cli" else self._opencode
-                    )(tmp, mission, system, wall)
+                    from .codex_channel import run_codex
+
+                    match self.spec.kind:
+                        case "claude_cli":
+                            text, cost, err = self._claude_cli(tmp, mission, system, wall)
+                        case "opencode":
+                            text, cost, err = self._opencode(tmp, mission, system, wall)
+                        case "codex_cli":
+                            text, cost, err = run_codex(tmp, system + "\n\n" + mission, wall)
+                        case unexpected:
+                            raise ProposerError(f"Unsupported channel: {unexpected}")
                 spent_usd += cost
                 if not text.strip():
                     last = err or "empty reply"

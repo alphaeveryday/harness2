@@ -49,6 +49,10 @@ Codex executors**, and **JobBench, LAB, and WorkBuddy-Bench**.
 
 ## Video overview
 
+The alphaeveryday fork adds a [Quant Lab profile](docs/QUANT.md) that uses this
+repository's actual recursion driver with the autoresearch and scientific-skills
+forks. The upstream benchmark paths below remain available.
+
 https://github.com/user-attachments/assets/76b10548-b14b-4c8f-9aa5-a93662df4d56
 
 ## Contents

@@ -66,6 +66,10 @@ def _res(surface_name: str, skill_dir: str, plugin_dir: str | None) -> dict[str,
     out = {
         "skill": re.compile(rf"{sd}/({_NAME})/SKILL\.md"),
         "skill_script": re.compile(rf"{sd}/{_NAME}/scripts/[A-Za-z0-9_.\-]+"),
+        "skill_resource": re.compile(
+            rf"{sd}/{_NAME}/(?:references|assets)/[A-Za-z0-9_./\-]+"
+            r"\.(?:md|txt|json|csv|yaml|yml|toml)"
+        ),
         "subagent": re.compile(rf"sub_agents/({_NAME})/AGENT\.md"),
         "script": re.compile(r"scripts/[a-z0-9_][a-z0-9_]*\.py"),
         "script_ref": re.compile(rf"(?:python3?\s+)((?:{sd}/[\w\-]+/)?scripts/[\w.\-]+\.py)"),
@@ -103,6 +107,7 @@ def is_allowed(surface: SurfaceSpec, rel: str) -> bool:
     if (
         r["skill"].fullmatch(rel)
         or r["skill_script"].fullmatch(rel)
+        or r["skill_resource"].fullmatch(rel)
         or r["subagent"].fullmatch(rel)
         or r["script"].fullmatch(rel)
     ):
@@ -329,7 +334,8 @@ def _check_script_refs(
         for ref in r["script_ref"].findall(src):
             if ref.rsplit("/", 1)[-1] in reserved_scripts:
                 continue
-            if ref not in have:
+            skill_relative = str(Path(rel).parent / ref)
+            if ref not in have and skill_relative not in have:
                 errs.append(f"{rel} invokes `{ref}` but that file is not in the harness")
 
 
