@@ -1,6 +1,7 @@
 """A numeric replay is incomplete until the selected harness authors a report."""
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -55,6 +56,29 @@ class QuantReportTests(unittest.TestCase):
             with self.assertRaises(QuantContractError):
                 self.adapter._research_report(self.adapter.base_harness(), self.run)
         self.assertFalse(self.adapter.delivered(self.run))
+
+    def test_native_probes_reuse_one_numeric_result_but_author_distinct_reports(self):
+        candidate = self.adapter.base_harness() / "scripts/train.py"
+        (self.run / "train.py").write_bytes(candidate.read_bytes())
+        (self.run / "fixed-inputs.json").write_text('{}')
+        self.adapter.workspace = replace(self.adapter.workspace, candidate=candidate, evaluation=self.run)
+        with patch("harness2.benchmarks.quant.subprocess.run") as numeric, \
+             patch("harness2.benchmarks.quant.run_codex", return_value=("authored note", 0.0, "")) as model:
+            first = self.adapter.execute("development", None, "base1")
+            second = self.adapter.execute("development", None, "inv1")
+            self.adapter.execute("development", None, "base1")
+        numeric.assert_not_called()
+        self.assertEqual(model.call_count, 2)
+        self.assertEqual(self.adapter.execution_count, 0)
+        self.assertNotEqual(first, second)
+        self.assertTrue(self.adapter.delivered(first) and self.adapter.delivered(second))
+
+    def test_native_proposal_cannot_replace_the_frozen_hypothesis(self):
+        candidate = self.adapter.base_harness() / "scripts/train.py"
+        self.adapter.workspace = replace(self.adapter.workspace, candidate=candidate)
+        proposed = {"scripts/train.py": "def alpha(d):\n    return 99\n"}
+        with self.assertRaisesRegex(QuantContractError, "frozen"):
+            self.adapter.validate_tree(proposed)
 
 
 if __name__ == "__main__":

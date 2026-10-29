@@ -508,6 +508,7 @@ def _run_one_mode(
         run_id_of=lambda lbl, _n=n: _n.run_id(task_id, lbl),
         base_tree=base_tree,
         library_dir=lib_dir,
+        **({"propose_workers": 1, "rollout_workers": 1} if adapter.spec.serial_execution else {}),
     )
     res.modes[mode] = r.to_dict()
     candidates = selection.selection_pool(mode, k, r.rollouts, base)

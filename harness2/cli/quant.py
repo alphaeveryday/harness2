@@ -1,13 +1,13 @@
-"""Run the original Harness² method on the forked Quant autoresearch profile."""
+"""Run one serial alpha factory using the three actual upstream forks."""
 from __future__ import annotations
 
 import argparse
-import json
+import sys
 from pathlib import Path
 
-from ..benchmarks.quant import QuantAdapter, QuantWorkspace
-from ..core.proposer import Proposer
-from ..core.schedule import mode_token, run_domain
+from ..benchmarks.quant import QuantWorkspace
+from ..benchmarks.quant_factory import Factory
+from ..benchmarks.quant_factory_state import FactoryBusy
 
 
 def main() -> int:
@@ -15,30 +15,27 @@ def main() -> int:
     parser.add_argument("--autoresearch", type=Path, required=True)
     parser.add_argument("--scientific-skills", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--task-file", type=Path, required=True)
-    parser.add_argument("--k", type=int, default=1)
-    parser.add_argument("--mode", choices=("parallel", "sequential"), default="sequential")
-    parser.add_argument("--prepare-only", action="store_true")
+    parser.add_argument("--history-file", type=Path, required=True)
+    parser.add_argument("--minimum-attempts", type=int, default=100)
+    parser.add_argument("--status", action="store_true")
     args = parser.parse_args()
-    if args.k < 1:
-        parser.error("--k must be positive")
+    if args.minimum_attempts < 1:
+        parser.error("--minimum-attempts must be positive")
     workspace = QuantWorkspace(args.output.resolve(), args.autoresearch.resolve(strict=True),
                                args.scientific_skills.resolve(strict=True))
-    adapter = QuantAdapter(workspace, args.task_file.read_text(encoding="utf-8"))
-    if args.prepare_only:
-        print(json.dumps({"base_harness": str(adapter.base_harness()), "model_calls": 0}))
+    factory = Factory(workspace, args.minimum_attempts, args.history_file.resolve(strict=True))
+    if args.status:
+        print((workspace.output / "status.json").read_text())
         return 0
-    proposer = Proposer(adapter.spec.channels["proposer"],
-                        audit_dir=workspace.output / "model-audit", attempts=1)
-    result = run_domain("daily-equities", adapter.tasks(), args.k, adapter=adapter,
-                        prop=proposer, runs_root=adapter.spec.runs_root,
-                        library_root=workspace.output / "library",
-                        modes=(mode_token(args.mode),))
-    result["execution_count"] = adapter.execution_count
-    result["investment_promotion"] = False
-    (workspace.output / "quant.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
-    print(json.dumps(result))
-    return int(result["failed"] > 0)
+    try:
+        factory.run()
+    except FactoryBusy as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    except Exception as error:  # noqa: BROAD_EXCEPT_OK -- retain CLI boundary failure.
+        factory.status("blocked", error=f"{type(error).__name__}: {error}")
+        raise
+    return 0
 
 
 if __name__ == "__main__":

@@ -146,6 +146,7 @@ class BenchSpec:
     proposer_deliverables: str = "contents"
     state_deliverable: bool = False
     obs_trunc: int = 50_000
+    serial_execution: bool = False
 
     def __post_init__(self) -> None:
         if self.install_mode not in INSTALL_MODES:

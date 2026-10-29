@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import shutil
+import signal
 import subprocess
 from pathlib import Path
 
@@ -18,10 +20,14 @@ def run_codex(cwd: Path, prompt: str, timeout: int) -> tuple[str, float, str]:
     with (cwd / "codex-stdout.log").open("w") as stdout, (
         cwd / "codex-stderr.log"
     ).open("w") as stderr:
-        process = subprocess.run(
-            argv, input=prompt, cwd=cwd, text=True, stdout=stdout,
-            stderr=stderr, timeout=timeout, check=False,
-        )
+        with subprocess.Popen(argv, cwd=cwd, text=True, stdin=subprocess.PIPE,
+                              stdout=stdout, stderr=stderr, start_new_session=True) as process:
+            try:
+                process.communicate(prompt, timeout=timeout)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.communicate()
+                return "", 0.0, f"Codex exceeded {timeout} seconds; its process group was stopped"
     if process.returncode != 0:
         return "", 0.0, f"Codex exited with status {process.returncode}"
     if not answer.is_file():

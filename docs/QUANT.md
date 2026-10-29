@@ -1,5 +1,56 @@
 # Quant Lab profile
 
+## Current entrypoint: one serial alpha factory
+
+The old replay CLI described below is retired. Its `--task-file`, `--k`, `--mode`
+and `--prepare-only` controls no longer exist. The historical description below
+documents the initial integration evidence, not another active research agent.
+
+```bash
+export QUANTLAB_REPO=/path/to/locked/quant-lab-research
+export QUANTLAB_HOME=/path/to/inherited/study
+export QUANTLAB_PROTOCOL=/path/to/frozen/PROTOCOL.md
+cd /path/to/harness2
+/path/to/locked/python -m harness2.cli.quant \
+  --autoresearch /path/to/autoresearch \
+  --scientific-skills /path/to/scientific-agent-skills \
+  --output /path/to/factory-run \
+  --history-file /path/to/inherited-research.md --minimum-attempts 100
+```
+
+One fresh author sees one hypothesis task, inherited failures and recent native
+Harness² experience. The author never receives the supervisor's target count.
+It writes a hypothesis and one candidate before seeing numeric results. Trusted
+`quant/preflight.py` checks synthetic prefixes, future perturbations, repeated
+calls and output alignment. The fixed `prepare.py` runs the candidate once.
+The inherited Quant Lab audited runner and assessor remain deterministic
+numeric dependencies, not a second agent loop.
+
+The supervisor then calls the original `core.schedule.run_task` with k=1 and
+only sequential mode. Proposal and rollout widths are both one. The candidate
+is frozen throughout that task: INV/DOM/COMPOSE improve research instructions,
+and four actual reports share the same numerical evidence. The original
+reflection/library and selected report feed the following hypothesis. No new
+candidate is authored until the preceding review finishes.
+
+`status.json` records progress. `attempts/*/complete.json` records terminal
+decisions; each attempt retains hypothesis, sealed source, preflight results,
+numeric evidence and native Harness² artifacts. The minimum counts completed
+new candidates with distinct executable AST and PnL. Comments, replays,
+duplicates and crashes do not fill the quota. This is not a count of independent
+statistical hypotheses. The prior study and all its failures remain intact.
+
+A study-wide flock excludes duplicate supervisors. Completed attempts resume
+without model calls or simulation. Interrupted unsealed authors and incomplete
+evaluations stop for reconciliation, rather than silently duplicating work.
+Two consecutive invalid or duplicate attempts stop with evidence. A `STOP` file
+in the output root stops between hypotheses. `--status` prints the checkpoint.
+Optional `QUANT_FACTORY_CHANNEL`, `QUANT_FACTORY_REPLY`, `QUANT_FACTORY_OWNER`
+publish authorized milestones to the originating Buzz thread. Final holdout,
+submission and orders remain disabled; promotion remains false.
+
+## Historical replay integration (retired CLI)
+
 This fork executes the original `core.schedule.run_domain`, Propose–Probe–Compose,
 selection, reflection, and library implementation against a Quant adapter. It
 does not replace the upstream method with a separate experiment loop.

@@ -15,7 +15,7 @@ from typing import Final
 
 from ..core import tree
 from ..core.codex_channel import run_codex
-from ..core.spec import BenchPrompts, BenchSpec, ChannelSpec
+from ..core.spec import BenchPrompts, BenchSpec, ChannelSpec, SubstrateLike
 from ..substrate.codex import CodexSubstrate
 
 SKILLS: Final = ("hypothesis-generation", "scientific-critical-thinking", "statistical-analysis")
@@ -30,6 +30,8 @@ class QuantWorkspace:
     output: Path
     autoresearch: Path
     scientific_skills: Path
+    candidate: Path | None = None
+    evaluation: Path | None = None
 
 
 class QuantAdapter:
@@ -38,7 +40,7 @@ class QuantAdapter:
     def __init__(self, workspace: QuantWorkspace, task: str):
         self.workspace = workspace
         self.task = task
-        self.substrate = CodexSubstrate()
+        self.substrate: SubstrateLike = CodexSubstrate()
         self._lock = threading.Lock()
         self.execution_count = 0
         channel = ChannelSpec("codex_cli", "operator-configured", timeout=900)
@@ -53,13 +55,14 @@ class QuantAdapter:
             channels={"proposer": channel, "selector": channel},
             reserved_scripts=frozenset({"prepare.py"}),
             leak_globs=("*holdout*", "*.parquet", "*.env"),
+            serial_execution=True,
         )
         self._materialize()
 
     def _materialize(self) -> None:
         profile = self.workspace.autoresearch / "quant"
         base = {"AGENTS.md": (profile / "program.md").read_text(encoding="utf-8"),
-                "scripts/train.py": (profile / "train.py").read_text(encoding="utf-8")}
+                "scripts/train.py": (self.workspace.candidate or profile / "train.py").read_text(encoding="utf-8")}
         manifest: dict[str, str] = {}
         for skill in SKILLS:
             source = self.workspace.scientific_skills / "skills" / skill
@@ -82,6 +85,9 @@ class QuantAdapter:
                   "study": {key: os.environ.get(key) for key in
                             ("QUANTLAB_REPO", "QUANTLAB_HOME", "QUANTLAB_PROTOCOL")}}
         frozen = root / "inputs.json"
+        if self.workspace.evaluation:
+            inputs["numeric_evidence"] = {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                                          for path in self.workspace.evaluation.iterdir() if path.is_file()}
         if frozen.exists() and json.loads(frozen.read_text()) != inputs:
             raise QuantContractError("Task, profile or study changed; use a new output directory")
         frozen.write_text(json.dumps(inputs, indent=2), encoding="utf-8")
@@ -109,13 +115,15 @@ class QuantAdapter:
     def base_harness(self) -> Path:
         return self.workspace.output / "base"
 
-    def validate_tree(self, candidate: tree.Tree) -> None:
-        if "scripts/train.py" not in candidate:
+    def validate_tree(self, tree: dict[str, str]) -> None:
+        if "scripts/train.py" not in tree:
             raise QuantContractError("The Quant executor requires scripts/train.py")
-        if any(path.startswith("scripts/") and path != "scripts/train.py" for path in candidate):
+        if self.workspace.candidate and tree["scripts/train.py"] != self.workspace.candidate.read_text():
+            raise QuantContractError("This hypothesis is frozen; improve research instructions only")
+        if any(path.startswith("scripts/") and path != "scripts/train.py" for path in tree):
             raise QuantContractError("The fixed executor runs only scripts/train.py")
         for skill in SKILLS:
-            if f".agents/skills/{skill}/SKILL.md" not in candidate:
+            if f".agents/skills/{skill}/SKILL.md" not in tree:
                 raise QuantContractError(f"The research context must retain {skill}")
 
     def execute(
@@ -136,6 +144,17 @@ class QuantAdapter:
                     raise QuantContractError("A completed run identity cannot change its source")
                 if self.delivered(directory):
                     return directory
+            elif self.workspace.evaluation:
+                directory.mkdir(parents=True, exist_ok=True)
+                source = self.workspace.evaluation
+                if (source / "train.py").read_bytes() != candidate.read_bytes():
+                    raise QuantContractError("Cached numeric evidence belongs to another candidate")
+                for name in ("train.py", "result.json", "assessment.json", "hypothesis.txt", "fixed-inputs.json"):
+                    shutil.copyfile(source / name, directory / name)
+                (directory / "trajectory.md").write_text(
+                    "[OBSERVATION] Reuse this hypothesis's fixed numerical evidence from " + str(source) + "\n",
+                    encoding="utf-8",
+                )
             else:
                 directory.parent.mkdir(parents=True, exist_ok=True)
                 self.execution_count += 1
@@ -191,6 +210,10 @@ class QuantAdapter:
     def delivered(self, run_dir: Path) -> bool:
         return all((run_dir / name).is_file() for name in
                    ("result.json", "assessment.json", "research_note.md"))
+
+    def score(self, run_dir: Path, task_id: str) -> None:
+        """No separate investment judge is available for this development adapter."""
+        return None
 
     def trajectory(self, run_dir: Path, *, obs_trunc: int) -> str:
         return (run_dir / "trajectory.md").read_text(encoding="utf-8")
